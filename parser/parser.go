@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+const maxDepth = 18
+
 type token struct {
 	Value string
 	Depth int
@@ -37,16 +39,16 @@ func IsValidJSON(json string) (bool, error) {
 
 		tk := jsonStack.Pop().(*token)
 		
-		if tk.Depth > 18 {
-			return false, fmt.Errorf("too deep")
-		}
-
 		tk.Value = strings.TrimSpace(tk.Value)
 
 		objectMatch := objectRe.FindStringSubmatch(tk.Value)
 		if objectMatch != nil {
 			isObjectOrArray = true
 			tk.Depth++
+
+			if tk.Depth > maxDepth {
+				return false, fmt.Errorf("too deep")
+			}
 
 			kvpTokens, err := parseObject(newToken(objectMatch[1], tk.Depth))
 			if err != nil {
@@ -64,6 +66,10 @@ func IsValidJSON(json string) (bool, error) {
 		if arrayMatch != nil {
 			isObjectOrArray = true
 			tk.Depth++
+
+			if tk.Depth > maxDepth {
+				return false, fmt.Errorf("too deep")
+			}
 
 			valueTokens, err := parseArray(newToken(arrayMatch[1], tk.Depth))
 			if err != nil {
