@@ -18,7 +18,7 @@ func NewToken(value string, depth int) *Token {
 	}
 }
 
-func ParseJSON(json string) (bool, error) {
+func IsValidJSON(json string) (bool, error) {
 	isObjectOrArray := false
 
 	objectRe := regexp.MustCompile(`(?s)^{(.*)}$`)
@@ -42,18 +42,22 @@ func ParseJSON(json string) (bool, error) {
 		}
 
 		token.Value = strings.TrimSpace(token.Value)
-		if token.Value == "" {
+		if token.Value == "" && token.Depth > -1 {
 			continue
 		}
 
 		objectMatch := objectRe.FindStringSubmatch(token.Value)
 		if objectMatch != nil {
-			token.Depth++
 			isObjectOrArray = true
+			token.Depth++
 
-			isValidObject, err := parseObject(jsonStack, []rune(objectMatch[1]), token.Depth)
-			if !isValidObject || err != nil {
+			kvpTokens, err := parseObject(NewToken(objectMatch[1], token.Depth))
+			if err != nil {
 				return false, err
+			}
+
+			for _, kvpToken := range kvpTokens {
+				jsonStack.Push(kvpToken)
 			}
 
 			continue
@@ -61,12 +65,16 @@ func ParseJSON(json string) (bool, error) {
 
 		arrayMatch := arrayRe.FindStringSubmatch(token.Value)
 		if arrayMatch != nil {
-			token.Depth++
 			isObjectOrArray = true
+			token.Depth++
 
-			isValidArray, err := parseArray(jsonStack, []rune(arrayMatch[1]), token.Depth)
-			if !isValidArray || err != nil {
+			valueTokens, err := parseArray(NewToken(arrayMatch[1], token.Depth))
+			if err != nil {
 				return false, err
+			}
+
+			for _, valueToken := range valueTokens {
+				jsonStack.Push(valueToken)
 			}
 
 			continue
@@ -98,14 +106,17 @@ func ParseJSON(json string) (bool, error) {
 	return true, nil
 }
 
-func parseObject(jsonStack *Stack, json []rune, depth int) (bool, error) {	
+func parseObject(token *Token) ([]*Token, error) {	
+	var result []*Token
+	json := []rune(token.Value)
 	objectStack := NewStack()
 	var sb strings.Builder
 	escapeFlag := false
 	commaFlag := false
-	for i := 0; i < len(json); i++ {
-		if json[i] != ',' || !objectStack.IsEmpty() {
-			sb.WriteRune(json[i])
+
+	for _, char := range json {
+		if char != ',' || !objectStack.IsEmpty() {
+			sb.WriteRune(char)
 		}
 
 		if escapeFlag {
@@ -113,11 +124,15 @@ func parseObject(jsonStack *Stack, json []rune, depth int) (bool, error) {
 			continue
 		}
 
-		switch json[i] {
-			case '{', '[', '"':
+		switch char {
+			case '{', '[':
 				if objectStack.Peek() != '"' {
-					objectStack.Push(json[i])
-				} else if json[i] == '"' && objectStack.Peek() == '"' {
+					objectStack.Push(char)
+				}
+			case '"':
+				if objectStack.Peek() != '"' {
+					objectStack.Push(char)
+				} else {
 					objectStack.Pop()
 				}
 			case '}':
@@ -134,57 +149,70 @@ func parseObject(jsonStack *Stack, json []rune, depth int) (bool, error) {
 				if objectStack.IsEmpty() {
 					commaFlag = true
 					
-					isValidKVP, err := parseKVP(jsonStack, sb.String(), depth, commaFlag)
-					if !isValidKVP || err != nil {
-						return false, err
+					kvpTokens, err := parseKVP(NewToken(sb.String(), token.Depth), commaFlag)
+					if err != nil {
+						return result, err
 					} 
+					
+					for _, kvpToken := range kvpTokens {
+						result = append(result, kvpToken)
+					}
+
 					sb.Reset()					
 				}
 		}	
 	}
 
 	if sb.Len() > 0 {
-		isValidKVP, err := parseKVP(jsonStack, sb.String(), depth, commaFlag)
-		if !isValidKVP || err != nil {
-			return false, err
+		kvpTokens, err := parseKVP(NewToken(sb.String(), token.Depth), commaFlag)
+		if err != nil {
+			return result, err
+		}
+
+		for _, kvpToken := range kvpTokens {
+			result = append(result, kvpToken)
 		}
 	}
 
 	if len(json) > 0 && json[len(json)-1] == ',' {
-		return false, fmt.Errorf("extra comma")
+		return result, fmt.Errorf("extra comma")
 	}
 
-	return true, nil
+	return result, nil
 }
 
-func parseKVP(jsonStack *Stack, json string, depth int, commaFlag bool) (bool, error) {
-	json = strings.TrimSpace(json)
+func parseKVP(token *Token, commaFlag bool) ([]*Token, error) {
+	var result []*Token
+	json := strings.TrimSpace(token.Value)
+	
 	if json == "" {
 		if commaFlag {
-			return false, fmt.Errorf("extra comma")
+			return result, fmt.Errorf("extra comma")
 		}
 
-		return true, nil
+		return result, nil
 	}
 
 	kvpRe := regexp.MustCompile(`(?s)^\".*?(?:\"\s*:)(.*)$`)
 	kvpMatch := kvpRe.FindStringSubmatch(json)
 	if kvpMatch != nil {
-		jsonStack.Push(NewToken(kvpMatch[1], depth))
-		return true, nil
+		result = append(result, NewToken(kvpMatch[1], token.Depth))
+		return result, nil
 	}
 
-	return false, fmt.Errorf("invalid kvp %s", json)
+	return result, fmt.Errorf("invalid kvp %s", json)
 }
 
-func parseArray(jsonStack *Stack, json []rune, depth int) (bool, error) {	
+func parseArray(token *Token) ([]*Token, error) {	
+	var result []*Token
+	json := []rune(token.Value)
 	arrayStack := NewStack()
 	var sb strings.Builder
 	escapeFlag := false
-	commaFlag := false
-	for i := 0; i < len(json); i++ {
-		if json[i] != ',' || !arrayStack.IsEmpty() {
-			sb.WriteRune(json[i])
+
+	for _, char := range json {
+		if char != ',' || !arrayStack.IsEmpty() {
+			sb.WriteRune(char)
 		}
 		
 		if escapeFlag {
@@ -192,11 +220,15 @@ func parseArray(jsonStack *Stack, json []rune, depth int) (bool, error) {
 			continue
 		}
 
-		switch json[i] {
-			case '{', '[', '"':
+		switch char {
+			case '{', '[':
 				if arrayStack.Peek() != '"' {
-					arrayStack.Push(json[i])
-				} else if json[i] == '"' && arrayStack.Peek() == '"' {
+					arrayStack.Push(char)
+				}
+			case '"':
+				if arrayStack.Peek() != '"' {
+					arrayStack.Push(char)
+				} else {
 					arrayStack.Pop()
 				}
 			case '}':
@@ -211,31 +243,24 @@ func parseArray(jsonStack *Stack, json []rune, depth int) (bool, error) {
 				escapeFlag = true
 			case ',':
 				if arrayStack.IsEmpty() {
-					commaFlag = true
-					
 					value := strings.TrimSpace(sb.String())
 					if value == "" {
-						return false, fmt.Errorf("extra comma")
+						return result, fmt.Errorf("extra comma")
 					}
 
-					jsonStack.Push(NewToken(value, depth))	 
+					result = append(result, NewToken(value, token.Depth))
 					sb.Reset()
 				}
 		}	
 	}
 
 	if sb.Len() > 0 {
-		value := strings.TrimSpace(sb.String())
-		if value == "" && commaFlag {
-			return false, fmt.Errorf("extra comma")
-		} else if value != "" {
-			jsonStack.Push(NewToken(value, depth))
-		}
+		result = append(result, NewToken(sb.String(), token.Depth))
 	}
 
 	if len(json) > 0 && json[len(json)-1] == ',' {
-		return false, fmt.Errorf("extra comma")
+		return result, fmt.Errorf("extra comma")
 	}
 		
-	return true, nil
+	return result, nil
 }

@@ -30,7 +30,7 @@ func run() int {
 		return 1
 	}
 
-	isValidJSON, err := parser.ParseJSON(string(data))
+	isValidJSON, err := parser.IsValidJSON(string(data))
 	if !isValidJSON || err != nil {
 		fmt.Println(err)
 		return 1

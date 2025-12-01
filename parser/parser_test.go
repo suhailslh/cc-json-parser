@@ -23,7 +23,7 @@ func TestParseJSONValid(t *testing.T) {
 				t.Errorf("Failed to read file: %v", file.Name())
 			}
 			
-			isValidJSON, err := ParseJSON(json)
+			isValidJSON, err := IsValidJSON(json)
 			if !isValidJSON || err != nil {
 				t.Errorf(`%s -> ParseJSON() = %t, %v, want match for %t, nil`, file.Name(), isValidJSON, err, true)
 			}
@@ -46,7 +46,7 @@ func TestParseJSONInvalid(t *testing.T) {
 				t.Errorf("Failed to read file: %v", file.Name())
 			}
 			
-			isValidJSON, err := ParseJSON(json)
+			isValidJSON, err := IsValidJSON(json)
 			if isValidJSON || err == nil {
 				t.Errorf(`%s -> ParseJSON() = %t, %v, want match for %t, some error`, file.Name(), isValidJSON, err, false)
 			}
