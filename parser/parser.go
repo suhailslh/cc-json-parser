@@ -42,9 +42,6 @@ func IsValidJSON(json string) (bool, error) {
 		}
 
 		token.Value = strings.TrimSpace(token.Value)
-		if token.Value == "" && token.Depth > -1 {
-			continue
-		}
 
 		objectMatch := objectRe.FindStringSubmatch(token.Value)
 		if objectMatch != nil {
@@ -108,7 +105,7 @@ func IsValidJSON(json string) (bool, error) {
 
 func parseObject(token *Token) ([]*Token, error) {	
 	var result []*Token
-	json := []rune(token.Value)
+	json := []rune(strings.TrimSpace(token.Value))
 	objectStack := NewStack()
 	var sb strings.Builder
 	escapeFlag := false
@@ -205,7 +202,7 @@ func parseKVP(token *Token, commaFlag bool) ([]*Token, error) {
 
 func parseArray(token *Token) ([]*Token, error) {	
 	var result []*Token
-	json := []rune(token.Value)
+	json := []rune(strings.TrimSpace(token.Value))
 	arrayStack := NewStack()
 	var sb strings.Builder
 	escapeFlag := false
