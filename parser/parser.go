@@ -6,13 +6,13 @@ import (
 	"fmt"
 )
 
-type Token struct {
+type token struct {
 	Value string
 	Depth int
 }
 
-func NewToken(value string, depth int) *Token {
-	return &Token {
+func newToken(value string, depth int) *token {
+	return &token {
 		Value: value,
 		Depth: depth,
 	}
@@ -29,26 +29,26 @@ func IsValidJSON(json string) (bool, error) {
 	nullRe := regexp.MustCompile(`^null$`)
 
 	jsonStack := NewStack()
-	jsonStack.Push(NewToken(json, -1))
+	jsonStack.Push(newToken(json, -1))
 	for {
 		if jsonStack.IsEmpty() {
 			break
 		}
 
-		token := jsonStack.Pop().(*Token)
+		tk := jsonStack.Pop().(*token)
 		
-		if token.Depth > 18 {
+		if tk.Depth > 18 {
 			return false, fmt.Errorf("too deep")
 		}
 
-		token.Value = strings.TrimSpace(token.Value)
+		tk.Value = strings.TrimSpace(tk.Value)
 
-		objectMatch := objectRe.FindStringSubmatch(token.Value)
+		objectMatch := objectRe.FindStringSubmatch(tk.Value)
 		if objectMatch != nil {
 			isObjectOrArray = true
-			token.Depth++
+			tk.Depth++
 
-			kvpTokens, err := parseObject(NewToken(objectMatch[1], token.Depth))
+			kvpTokens, err := parseObject(newToken(objectMatch[1], tk.Depth))
 			if err != nil {
 				return false, err
 			}
@@ -60,12 +60,12 @@ func IsValidJSON(json string) (bool, error) {
 			continue
 		}
 
-		arrayMatch := arrayRe.FindStringSubmatch(token.Value)
+		arrayMatch := arrayRe.FindStringSubmatch(tk.Value)
 		if arrayMatch != nil {
 			isObjectOrArray = true
-			token.Depth++
+			tk.Depth++
 
-			valueTokens, err := parseArray(NewToken(arrayMatch[1], token.Depth))
+			valueTokens, err := parseArray(newToken(arrayMatch[1], tk.Depth))
 			if err != nil {
 				return false, err
 			}
@@ -77,23 +77,23 @@ func IsValidJSON(json string) (bool, error) {
 			continue
 		}
 
-		if stringRe.MatchString(token.Value) {
+		if stringRe.MatchString(tk.Value) {
 			continue
 		}		
 
-		if numberRe.MatchString(token.Value) {
+		if numberRe.MatchString(tk.Value) {
 			continue
 		}
 
-		if boolRe.MatchString(token.Value) {
+		if boolRe.MatchString(tk.Value) {
 			continue
 		}
 
-		if nullRe.MatchString(token.Value) {
+		if nullRe.MatchString(tk.Value) {
 			continue
 		}
 
-		return false, fmt.Errorf("invalid json %s", token.Value)
+		return false, fmt.Errorf("invalid json %s", tk.Value)
 	}
 
 	if !isObjectOrArray {
@@ -103,9 +103,9 @@ func IsValidJSON(json string) (bool, error) {
 	return true, nil
 }
 
-func parseObject(token *Token) ([]*Token, error) {	
-	var result []*Token
-	json := []rune(strings.TrimSpace(token.Value))
+func parseObject(tk *token) ([]*token, error) {	
+	var result []*token
+	json := []rune(strings.TrimSpace(tk.Value))
 	objectStack := NewStack()
 	var sb strings.Builder
 	escapeFlag := false
@@ -146,7 +146,7 @@ func parseObject(token *Token) ([]*Token, error) {
 				if objectStack.IsEmpty() {
 					commaFlag = true
 					
-					kvpTokens, err := parseKVP(NewToken(sb.String(), token.Depth), commaFlag)
+					kvpTokens, err := parseKVP(newToken(sb.String(), tk.Depth), commaFlag)
 					if err != nil {
 						return result, err
 					} 
@@ -161,7 +161,7 @@ func parseObject(token *Token) ([]*Token, error) {
 	}
 
 	if sb.Len() > 0 {
-		kvpTokens, err := parseKVP(NewToken(sb.String(), token.Depth), commaFlag)
+		kvpTokens, err := parseKVP(newToken(sb.String(), tk.Depth), commaFlag)
 		if err != nil {
 			return result, err
 		}
@@ -178,9 +178,9 @@ func parseObject(token *Token) ([]*Token, error) {
 	return result, nil
 }
 
-func parseKVP(token *Token, commaFlag bool) ([]*Token, error) {
-	var result []*Token
-	json := strings.TrimSpace(token.Value)
+func parseKVP(tk *token, commaFlag bool) ([]*token, error) {
+	var result []*token
+	json := strings.TrimSpace(tk.Value)
 	
 	if json == "" {
 		if commaFlag {
@@ -193,16 +193,16 @@ func parseKVP(token *Token, commaFlag bool) ([]*Token, error) {
 	kvpRe := regexp.MustCompile(`(?s)^\".*?(?:\"\s*:)(.*)$`)
 	kvpMatch := kvpRe.FindStringSubmatch(json)
 	if kvpMatch != nil {
-		result = append(result, NewToken(kvpMatch[1], token.Depth))
+		result = append(result, newToken(kvpMatch[1], tk.Depth))
 		return result, nil
 	}
 
 	return result, fmt.Errorf("invalid kvp %s", json)
 }
 
-func parseArray(token *Token) ([]*Token, error) {	
-	var result []*Token
-	json := []rune(strings.TrimSpace(token.Value))
+func parseArray(tk *token) ([]*token, error) {	
+	var result []*token
+	json := []rune(strings.TrimSpace(tk.Value))
 	arrayStack := NewStack()
 	var sb strings.Builder
 	escapeFlag := false
@@ -245,14 +245,14 @@ func parseArray(token *Token) ([]*Token, error) {
 						return result, fmt.Errorf("extra comma")
 					}
 
-					result = append(result, NewToken(value, token.Depth))
+					result = append(result, newToken(value, tk.Depth))
 					sb.Reset()
 				}
 		}	
 	}
 
 	if sb.Len() > 0 {
-		result = append(result, NewToken(sb.String(), token.Depth))
+		result = append(result, newToken(sb.String(), tk.Depth))
 	}
 
 	if len(json) > 0 && json[len(json)-1] == ',' {
